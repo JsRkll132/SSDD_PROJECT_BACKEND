@@ -3,7 +3,7 @@ from flask import Blueprint, jsonify, request
 import pika
 
 from app.Rabbitmq.rabbitmq import get_rabbitmq_connection
-from app.Repository.repository import agregar_productoRepository, confirmar_ordenRepository, confirmar_pagoRepository, facturas_pendientesRepository, generar_orden, getRoles, listar_productos, pagarRepository, verificar_scoreRepository
+from app.Repository.repository import agregar_productoRepository, confirmar_ordenRepository, confirmar_pagoRepository, facturas_pendientesRepository, generar_orden, getRoles, listar_productos, login_userRepository, pagarRepository, verificar_scoreRepository
 
 
 users_routes = Blueprint('users_routes',__name__)
@@ -143,3 +143,19 @@ def listar_productosRoutes() :
     except Exception as e : 
         print(str(e))
         return jsonify({'error': 'Error en la operacion'}),500        
+
+@users_routes.route('/api/login',methods=['POST'])
+def login_userRoutes() : 
+    try :
+        user_data = request.json
+        print(user_data)
+        response = login_userRepository(user_data)
+        
+        if response['status']==-1 or response['status'] == 0  : 
+            return jsonify(response) ,503
+        elif response['status']==1 : 
+            return jsonify(response) ,201
+    
+    except Exception as e :
+        print(str(e))
+        return jsonify({'error': 'Error en la operacion'}),500                

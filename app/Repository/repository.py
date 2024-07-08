@@ -165,3 +165,20 @@ def agregar_productoRepository(data) :
         print(str(e))
         session.rollback()
         return None
+    
+def login_userRepository(user_data) :
+    try : 
+        user = session.query(Usuario).filter_by(nombre_usuario=user_data['username']).first()
+  
+        if   user == None  : 
+            return {'status':0,'error' : 'Usuario no existe'}
+        elif user.contrasena != user_data['password'] : 
+            return {'status':0,'error' : 'Contraseña mal puesta'}
+        else:
+            return {'status':1,'data_info':{'usuario' :user.nombre_usuario ,'id':user.id}}
+
+    except Exception as e : 
+        print(str(e))
+        session.rollback()
+        return {'status':-1,'error' : 'Ocurrio un error al iniciar sesion.'}
+

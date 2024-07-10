@@ -75,6 +75,26 @@ class Reserva(Base):
 Usuario.ordenes = relationship('Orden', order_by=Orden.id, back_populates='cliente')
 
 
+class Carrito(Base):
+    __tablename__ = 'carritos'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    usuario_id = Column(Integer, ForeignKey('usuarios.id'), nullable=False)
+    fecha_creacion = Column(DateTime, default=func.now())
+
+    items = relationship("ItemCarrito", back_populates="carrito")
+
+class ItemCarrito(Base):
+    __tablename__ = 'items_carrito'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    carrito_id = Column(Integer, ForeignKey('carritos.id'), nullable=False)
+    producto_id = Column(Integer, ForeignKey('productos.id'), nullable=False)
+    cantidad = Column(Integer, nullable=False)
+
+    carrito = relationship("Carrito", back_populates="items")
+    producto = relationship("Producto")
+
 engine = create_engine(os.getenv('DATABASE_URL'))
 
 # Crear todas las tablas

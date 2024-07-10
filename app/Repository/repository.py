@@ -4,7 +4,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.Rabbitmq.rabbitmq import get_rabbitmq_connection
-from ..Models.models import Reserva, Usuario,Producto,Factura,Orden,ItemOrden,Rol
+from ..Models.models import Carrito, ItemCarrito, Reserva, Usuario,Producto,Factura,Orden,ItemOrden,Rol
 import os
 
 
@@ -31,33 +31,47 @@ def listar_productos():
     except : 
         session.rollback()
         return None
-    
-def generar_orden(client_id,items) : 
-    try :
-        nueva_orden = Orden(cliente_id=client_id, estado='Pendiente')
-        session.add(nueva_orden)
-        session.commit()
-        for item in items:
-            producto_id = item['producto_id']
-            cantidad = item['cantidad']
-            producto = session.query(Producto).get(producto_id)
-            if producto and producto.stock >= cantidad:
-                item_orden = ItemOrden(
-                    orden_id=nueva_orden.id,
-                    producto_id=producto_id,
-                    cantidad=cantidad,
-                    precio_compra=producto.precio
-                )
-                producto.stock -= cantidad
-                session.add(item_orden)
-            else:
-                return {'error': 'Producto no disponible o stock insuficiente'}
-        session.commit()
-        return {'message': 'Orden generada con éxito', 'orden_id': nueva_orden.id}
-    except : 
-        session.rollback()
-        return None
 
+        
+def generar_orden(usuario_id):
+    try:
+        # Obtener el carrito del usuario
+        carrito = session.query(Carrito).filter_by(usuario_id=usuario_id).first()
+        if not carrito:
+            return {'status': -1, 'error': 'Carrito no encontrado'}
+
+        # Crear una nueva orden
+        nueva_orden = Orden(cliente_id=usuario_id, estado='Pendiente')
+        session.add(nueva_orden)
+        session.flush()  # Para obtener el id de la orden antes de commit
+
+        # Detallar los productos comprados y actualizar stock
+        for item in carrito.items:
+            producto = item.producto
+            if item.cantidad > producto.stock:
+                return {'status': -1, 'error': f'Cantidad solicitada del producto {producto.nombre} supera el stock disponible'}
+
+            producto.stock -= item.cantidad
+
+            # Añadir el item a la orden
+            item_orden = ItemOrden(
+                orden_id=nueva_orden.id,
+                producto_id=item.producto_id,
+                cantidad=item.cantidad,
+                precio_compra=producto.precio
+            )
+            session.add(item_orden)
+
+        # Borrar los items del carrito
+        session.query(ItemCarrito).filter_by(carrito_id=carrito.id).delete()
+
+        # Guardar cambios en la base de datos
+        session.commit()
+        return {'status': 0, 'message': 'Orden generada correctamente', 'orden_id': nueva_orden.id}
+
+    except Exception as e:
+        session.rollback()
+        return {'status': -1, 'error': 'Ocurrió un error al momento de generar la orden', 'details': str(e)}
 
 def pagarRepository(orden_id,metodo):
     try :
@@ -175,10 +189,93 @@ def login_userRepository(user_data) :
         elif user.contrasena != user_data['password'] : 
             return {'status':0,'error' : 'Contraseña mal puesta'}
         else:
-            return {'status':1,'data_info':{'usuario' :user.nombre_usuario ,'id':user.id}}
+            return {'status':1,'data_info':{'usuario' :user.nombre_usuario ,'id':user.id,'rol':user.rol_id}}
 
     except Exception as e : 
         print(str(e))
         session.rollback()
         return {'status':-1,'error' : 'Ocurrio un error al iniciar sesion.'}
+    
 
+    
+def AddToCarRepository(carrito_id, producto_id, cantidad):
+    try:
+        # Obtener el producto para verificar el stock
+        producto = session.query(Producto).filter_by(id=producto_id).first()
+        
+        if not producto:
+            return {'status': -1, 'error': 'Producto no encontrado'}
+        
+        # Verificar si el producto ya está en el carrito
+        item_carrito = session.query(ItemCarrito).filter_by(carrito_id=carrito_id, producto_id=producto_id).first()
+        
+        if item_carrito:
+            # Si el producto ya está en el carrito, calcular la nueva cantidad
+            nueva_cantidad = cantidad
+        else:
+            # Si el producto no está en el carrito, la nueva cantidad es simplemente la cantidad proporcionada
+            nueva_cantidad = cantidad
+        
+        # Verificar si la nueva cantidad supera el stock disponible
+        if nueva_cantidad > producto.stock:
+            return {'status': -1, 'error': 'Cantidad solicitada supera el stock disponible'}
+        
+        if item_carrito:
+            # Actualizar la cantidad del producto en el carrito
+            item_carrito.cantidad = nueva_cantidad
+        else:
+            # Agregar un nuevo item al carrito
+            nuevo_item = ItemCarrito(carrito_id=carrito_id, producto_id=producto_id, cantidad=cantidad)
+            session.add(nuevo_item)
+        
+        # Guardar cambios en la base de datos
+        session.commit()
+        return {'status': 1, 'message': f'Producto {producto.id} añadido/actualizado correctamente en el carrito'}
+    
+    except Exception as e:
+        # En caso de error, revertir la transacción
+        session.rollback()
+        return {'status': -1, 'error': 'Ocurrió un error al momento de añadir al carrito', 'details': str(e)}
+
+
+def obtener_productos_en_carritosRepository():
+    try:
+        # Consulta para obtener el nombre del producto, ID del producto y otros atributos junto con la cantidad en el carrito, ID del carrito y ID del item de carrito
+        query = session.query(
+                    Producto.nombre.label('nombre_producto'),
+                    Producto.id.label('id_producto'),
+                    Producto.precio,
+                    Producto.sku,
+                    Producto.stock,
+                    ItemCarrito.cantidad.label('cantidad_en_carrito'),
+                    ItemCarrito.carrito_id,
+                    ItemCarrito.id.label('item_carrito_id')
+                ).join(
+                    ItemCarrito,
+                    Producto.id == ItemCarrito.producto_id,
+                   
+                )
+        
+        # Ejecutar la consulta y obtener los resultados
+        resultados = query.all()
+
+        # Convertir resultados a formato JSON
+        productos_en_carritos_json = []
+        for resultado in resultados:
+            producto_json = {
+                'nombre_producto': resultado.nombre_producto,
+                'id_producto': resultado.id_producto,
+                'precio': float(resultado.precio),
+                'sku': resultado.sku,
+                'stock': resultado.stock,
+                'cantidad_en_carrito': resultado.cantidad_en_carrito,
+                'carrito_id': resultado.carrito_id,
+                'item_carrito_id': resultado.item_carrito_id
+            }
+            productos_en_carritos_json.append(producto_json)
+
+        return productos_en_carritos_json
+
+    except Exception as e:
+        session.rollback()
+        return {'status': -1, 'error': 'Ocurrió un error al momento obtener los carritos', 'details': str(e)}

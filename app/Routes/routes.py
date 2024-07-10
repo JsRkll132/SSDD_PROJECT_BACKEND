@@ -3,7 +3,7 @@ from flask import Blueprint, jsonify, request
 import pika
 
 from app.Rabbitmq.rabbitmq import get_rabbitmq_connection
-from app.Repository.repository import agregar_productoRepository, confirmar_ordenRepository, confirmar_pagoRepository, facturas_pendientesRepository, generar_orden, getRoles, listar_productos, login_userRepository, pagarRepository, verificar_scoreRepository
+from app.Repository.repository import AddToCarRepository, agregar_productoRepository, confirmar_ordenRepository, confirmar_pagoRepository, facturas_pendientesRepository, generar_orden, getRoles, listar_productos, login_userRepository, obtener_productos_en_carritosRepository, pagarRepository, verificar_scoreRepository
 
 
 users_routes = Blueprint('users_routes',__name__)
@@ -23,17 +23,21 @@ def getRolesRoute() :
     
 
 @users_routes.route('/api/generar_orden', methods=['POST'])
-def generar_ordenRoute():
-    try :
-        data = request.json
-        cliente_id = data['cliente_id']
-        items = data['items']  # Lista de diccionarios con producto_id y cantidad
-        response  = generar_orden(cliente_id,items)
-        if response['error'] :
-            return jsonify(response) ,401
-        if response != None :
-            return jsonify(response),201
-    except : 
+def generar_orden_endpoint():
+    try : 
+        data = request.get_json()
+        usuario_id = data.get('usuario_id')
+        
+        if not usuario_id:
+            return jsonify({'status': -1, 'error': 'usuario_id es requerido'}), 400
+        
+        response = generar_orden(usuario_id)
+        if response['status'] == -1:
+            return jsonify(response), 400
+        else:
+            return jsonify(response), 201
+    except Exception as e : 
+        print(str(e))
         return jsonify({'error': 'Error en la operacion'}),500
         
 @users_routes.route('/api/pagar', methods=['POST'])
@@ -159,3 +163,33 @@ def login_userRoutes() :
     except Exception as e :
         print(str(e))
         return jsonify({'error': 'Error en la operacion'}),500                
+    
+@users_routes.route('/api/addtoCar',methods=['POST'])
+def AddToCarRoutes() : 
+    try:
+        data = request.get_json()
+        carrito_id = data.get('carrito_id')
+        producto_id = data.get('producto_id')
+        cantidad = data.get('cantidad')
+
+        if not carrito_id or not producto_id or not cantidad:
+            return jsonify({'status': -1, 'error': 'carrito_id, producto_id, y cantidad son necesarios'}), 400
+
+        result = AddToCarRepository(carrito_id, producto_id, cantidad)
+
+        if result['status'] == -1:
+            return jsonify(result), 400
+        return jsonify(result), 201
+    except Exception as e:
+        return jsonify({'status': -1, 'error': 'Ocurrió un error procesando la solicitud', 'details': str(e)}), 500
+           
+
+@users_routes.route('/api/productos_en_carritos', methods=['GET'])
+def obtener_productos_en_carritosRoutes():
+    try : 
+        data = obtener_productos_en_carritosRepository()
+        return jsonify({"status":1,"data":data}),200
+        pass
+    except Exception as e:
+        return jsonify({'status': -1, 'error': 'Ocurrió un error procesando la solicitud', 'details': str(e)}), 500
+           

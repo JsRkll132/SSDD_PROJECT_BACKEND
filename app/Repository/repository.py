@@ -32,13 +32,21 @@ def listar_productos():
         session.rollback()
         return None
 
-        
+
+def deleteFromCarritoRepository(item_id) : 
+    try :
+        session.query(ItemCarrito).filter_by(id=item_id).delete()
+        session.commit()
+        return {'status': 1, 'message': 'Producto eliminado del carrito', 'item_carrito_deleted': item_id}
+    except Exception as e : 
+        session.rollback()
+        return {'status': -1, 'error': 'Ocurrió un error al momento de quitar el item', 'details': str(e)}
 def generar_orden(usuario_id):
     try:
         # Obtener el carrito del usuario
         carrito = session.query(Carrito).filter_by(usuario_id=usuario_id).first()
-        if not carrito:
-            return {'status': -1, 'error': 'Carrito no encontrado'}
+        if not carrito or not carrito.items:
+            return {'status': -1, 'error': 'No hay ítems en el carrito para generar la orden'}
 
         # Crear una nueva orden
         nueva_orden = Orden(cliente_id=usuario_id, estado='Pendiente')
@@ -46,27 +54,32 @@ def generar_orden(usuario_id):
         session.flush()  # Para obtener el id de la orden antes de commit
 
         # Detallar los productos comprados y actualizar stock
-        for item in carrito.items:
-            producto = item.producto
-            if item.cantidad > producto.stock:
+        for item_carrito in carrito.items:
+            producto = item_carrito.producto
+
+            # Verificar si la cantidad solicitada supera el stock disponible
+            if item_carrito.cantidad > producto.stock:
                 return {'status': -1, 'error': f'Cantidad solicitada del producto {producto.nombre} supera el stock disponible'}
 
-            producto.stock -= item.cantidad
+            # Actualizar el stock del producto
+            producto.stock -= item_carrito.cantidad
 
-            # Añadir el item a la orden
+            # Crear un nuevo ítem de orden
             item_orden = ItemOrden(
                 orden_id=nueva_orden.id,
-                producto_id=item.producto_id,
-                cantidad=item.cantidad,
-                precio_compra=producto.precio
+                producto_id=item_carrito.producto_id,
+                cantidad=item_carrito.cantidad,
+                precio_compra=producto.precio,
+                
             )
             session.add(item_orden)
 
-        # Borrar los items del carrito
+        # Borrar los ítems del carrito
         session.query(ItemCarrito).filter_by(carrito_id=carrito.id).delete()
 
         # Guardar cambios en la base de datos
         session.commit()
+
         return {'status': 0, 'message': 'Orden generada correctamente', 'orden_id': nueva_orden.id}
 
     except Exception as e:

@@ -3,7 +3,7 @@ from flask import Blueprint, jsonify, request
 import pika
 
 from app.Rabbitmq.rabbitmq import get_rabbitmq_connection
-from app.Repository.repository import AddToCarRepository, agregar_productoRepository, confirmar_ordenRepository, confirmar_pagoRepository, facturas_pendientesRepository, generar_orden, getRoles, listar_productos, login_userRepository, obtener_productos_en_carritosRepository, pagarRepository, verificar_scoreRepository
+from app.Repository.repository import AddToCarRepository, agregar_productoRepository, confirmar_ordenRepository, confirmar_pagoRepository, deleteFromCarritoRepository, facturas_pendientesRepository, generar_orden, getRoles, listar_productos, login_userRepository, obtener_productos_en_carritosRepository, pagarRepository, verificar_scoreRepository
 
 
 users_routes = Blueprint('users_routes',__name__)
@@ -193,3 +193,14 @@ def obtener_productos_en_carritosRoutes():
     except Exception as e:
         return jsonify({'status': -1, 'error': 'Ocurrió un error procesando la solicitud', 'details': str(e)}), 500
            
+@users_routes.route('/api/eliminaritem', methods=['POST'])
+def deleteFromCarritoRoutes() : 
+    try : 
+        data = request.get_json()
+        item_id_ =data.get('item_id')
+        response = deleteFromCarritoRepository(item_id_)
+        if response['status'] == -1 :
+            return jsonify(response),400
+        return jsonify(response),201
+    except Exception as e:
+        return jsonify({'status': -1, 'error': 'Ocurrió un error procesando la solicitud', 'details': str(e)}), 500

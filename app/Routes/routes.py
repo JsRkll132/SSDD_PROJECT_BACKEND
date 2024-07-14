@@ -3,7 +3,7 @@ from flask import Blueprint, jsonify, request
 import pika
 
 from app.Rabbitmq.rabbitmq import get_rabbitmq_connection
-from app.Repository.repository import AddToCarRepository, agregar_productoRepository, confirmar_ordenRepository, confirmar_pagoRepository, deleteFromCarritoRepository, facturas_pendientesRepository, generar_orden, getRoles, listar_productos, login_userRepository, obtener_productos_en_carritosRepository, pagarRepository, verificar_scoreRepository
+from app.Repository.repository import AddToCarRepository, agregar_productoRepository, confirmar_ordenRepository, confirmar_pagoRepository, deleteFromCarritoRepository, facturas_pendientesRepository, generar_orden, getRoles, listar_productos, login_userRepository, obtener_ordenesByIdRepository, obtener_ordenesRepository, obtener_productos_en_carritosRepository, pagarRepository, verificar_scoreRepository
 
 
 users_routes = Blueprint('users_routes',__name__)
@@ -202,5 +202,28 @@ def deleteFromCarritoRoutes() :
         if response['status'] == -1 :
             return jsonify(response),400
         return jsonify(response),201
+    except Exception as e:
+        return jsonify({'status': -1, 'error': 'Ocurrió un error procesando la solicitud', 'details': str(e)}), 500
+    
+@users_routes.route('/api/ordenes', methods=['GET'])
+def obtener_ordenesRoutes():
+    try : 
+        data = obtener_ordenesRepository()
+        if data : 
+            return  jsonify({'status': 1, 'ordenes': data})
+
+    except Exception as e:
+        return jsonify({'status': -1, 'error': 'Ocurrió un error procesando la solicitud', 'details': str(e)}), 500
+    
+
+
+@users_routes.route('/api/ordenes/<int:orden_id>', methods=['GET'])
+def obtener_ordenesByIdRoutes(orden_id) : 
+    try : 
+        data = obtener_ordenesByIdRepository(orden_id)
+        if data['status']==1 : 
+            return  jsonify(data),200
+        else : 
+            return jsonify(data),400
     except Exception as e:
         return jsonify({'status': -1, 'error': 'Ocurrió un error procesando la solicitud', 'details': str(e)}), 500

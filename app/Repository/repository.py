@@ -1,6 +1,6 @@
 import json
 import pika
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, func
 from sqlalchemy.orm import sessionmaker
 
 from app.Rabbitmq.rabbitmq import get_rabbitmq_connection
@@ -292,3 +292,53 @@ def obtener_productos_en_carritosRepository():
     except Exception as e:
         session.rollback()
         return {'status': -1, 'error': 'Ocurrió un error al momento obtener los carritos', 'details': str(e)}
+    
+
+def obtener_ordenesRepository():
+    try : 
+        ordenes = session.query(
+            Orden.id,
+            Orden.fecha_creacion,
+            Usuario.nombre_usuario,
+            Orden.estado,
+            func.sum(ItemOrden.cantidad * ItemOrden.precio_compra).label('monto_total')
+        ).join(Usuario).join(ItemOrden).group_by(Orden.id, Usuario.nombre_usuario).all()
+        ordenes_json = [{
+                'id': orden.id,
+                'fecha_creacion': orden.fecha_creacion,
+                'estado':orden.estado,
+                'nombre_usuario': orden.nombre_usuario,
+                'monto_total': float(orden.monto_total)
+            } for orden in ordenes]
+        return ordenes_json
+       
+    except Exception as e:
+        session.rollback()
+        return {'status': -1, 'error': 'Ocurrió un error al momento obtener las ordenes', 'details': str(e)}
+    
+def obtener_ordenesByIdRepository(orden_id):
+    try:
+        # Consultar la orden y sus detalles
+        orden = session.query(Orden).filter_by(id=orden_id).first()
+        if not orden:
+            return {'status': -1, 'error': 'Orden no encontrada'}
+        
+        detalles = [{
+                'producto_id': item.producto_id,
+                'nombre_producto': item.producto.nombre,
+                'cantidad': item.cantidad,
+                'precio_compra': item.precio_compra
+            } for item in orden.items]
+      
+        
+        orden_json = {
+            'id': orden.id,
+            'fecha_creacion': orden.fecha_creacion,
+            'cliente': orden.cliente.nombre_usuario,
+            'estado': orden.estado,
+            'detalles': detalles
+        }
+        return {'status': 1, 'orden': orden_json}
+    except Exception as e:
+        session.rollback()
+        return {'status': -1, 'error': 'Ocurrió un error al momento obtener las ordenes', 'details': str(e)}

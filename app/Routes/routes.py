@@ -54,20 +54,6 @@ def pagarRoute():
     except : 
         return jsonify({'error': 'Error en la operacion'}),500
 
-@users_routes.route('/api/confirmar_orden', methods=['POST'])
-def confirmar_ordenRoute():
-    try :
-        data = request.json
-        orden_id = data['orden_id']
-        response = confirmar_ordenRepository(orden_id)
-        if response['error'] : 
-            return jsonify(response),401
-        if response!=None : 
-            return jsonify(response),201
-    except : 
-        return jsonify({'error': 'Error en la operacion'}),500
-    
-
 
 @users_routes.route('/api/verificar_score', methods=['POST'])
 def verificar_score():
@@ -226,4 +212,24 @@ def obtener_ordenesByIdRoutes(orden_id) :
         else : 
             return jsonify(data),400
     except Exception as e:
+        return jsonify({'status': -1, 'error': 'Ocurrió un error procesando la solicitud', 'details': str(e)}), 500
+
+
+@users_routes.route('/api/confirmar_orden', methods=['POST'])
+def confirmar_ordenRoutes():
+    try:
+        data = request.json
+        orden_id = data.get('orden_id')
+        metodo_pago = data.get('metodo_pago')  # 'score_crediticio' o 'credito'
+        print(data)
+        response =  confirmar_ordenRepository(orden_id,metodo_pago)
+        print(response	)
+        if response['status'] == 1 : 
+            return response,201
+        elif  response['status'] == 0 : 
+            return response, 400
+        else : 
+            return response , 500
+    except Exception as e:
+        print(str(e))
         return jsonify({'status': -1, 'error': 'Ocurrió un error procesando la solicitud', 'details': str(e)}), 500

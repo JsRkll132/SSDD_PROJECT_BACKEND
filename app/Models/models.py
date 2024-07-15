@@ -26,7 +26,9 @@ class Usuario(Base):
     contrasena = Column(String(100), nullable=False)
     rol_id = Column(Integer, ForeignKey('roles.id'), nullable=False)
     score_crediticio = Column(Integer)
+    credito = Column(Float, default=0.0)  # Nueva columna
     rol = relationship('Rol')
+    ordenes = relationship('Orden', back_populates='cliente')
 
 class Producto(Base):
     __tablename__ = 'productos'

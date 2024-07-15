@@ -102,22 +102,39 @@ def pagarRepository(orden_id,metodo):
         print(str(e))
         return {'error': 'Error en la operacion'}
 
-def confirmar_ordenRepository(orden_id) : 
+def confirmar_ordenRepository(orden_id,metodo_pago) : 
     try :
-        orden = session.query(Orden).get(orden_id)
+        print(orden_id)
+        if not orden_id or not metodo_pago:
+            return {'status':0,'error': 'Falta el ID de la orden o el método de pago'}
+        
+        orden = session.query(Orden).filter_by(id=orden_id).first()
         if not orden:
-            return {'error': 'Orden no encontrada'}
-
+            return {'status':0,'error': 'Orden no encontrada'}
+        
+        cliente = orden.cliente
+        
+        total_orden = sum(item.precio_compra * item.cantidad for item in orden.items)
+        
+        if metodo_pago == 'score_crediticio':
+            if cliente.score_crediticio < total_orden:
+                return {'status':0,'error': 'Score crediticio insuficiente'}
+            cliente.score_crediticio -= total_orden
+        elif metodo_pago == 'credito':
+            if cliente.credito < total_orden:
+                return {'status':0,'error': 'Crédito insuficiente'}
+            cliente.credito -= total_orden
+        else:
+            return {'status':0,'error': 'Método de pago no válido'}
+        
         orden.estado = 'Confirmada'
-        reserva = Reserva(orden_id=orden_id)
-        session.add(reserva)
         session.commit()
-
-        return {'message': 'Orden confirmada y reservada con éxito'}
+        
+        return {'status':1,'message': 'Orden confirmada exitosamente'}
     except Exception as e :
         session.rollback()
         print(str(e))
-        return {'error': 'Error en la operacion'}
+        return {'status':-1,'error': 'Error en la operacion','info':str(e)}
     
 
 def verificar_scoreRepository(cliente_id) : 

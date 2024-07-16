@@ -3,7 +3,7 @@ from flask import Blueprint, jsonify, request
 import pika
 
 from app.Rabbitmq.rabbitmq import get_rabbitmq_connection
-from app.Repository.repository import AddToCarRepository, agregar_productoRepository, confirmar_ordenRepository, confirmar_pagoRepository, deleteFromCarritoRepository, facturas_pendientesRepository, generar_orden, getRoles, listar_productos, login_userRepository, obtener_ordenesByIdRepository, obtener_ordenesRepository, obtener_productos_en_carritosRepository, pagarRepository, verificar_scoreRepository
+from app.Repository.repository import AddToCarRepository, agregar_productoRepository, confirmar_ordenRepository, confirmar_pagoRepository, delete_productoRepository, deleteFromCarritoRepository, facturas_pendientesRepository, generar_orden, getRoles, listar_productos, login_userRepository, obtener_ordenesByIdRepository, obtener_ordenesRepository, obtener_productos_en_carritosRepository, pagarRepository, update_productoRepository, verificar_scoreRepository
 
 
 users_routes = Blueprint('users_routes',__name__)
@@ -230,6 +230,37 @@ def confirmar_ordenRoutes():
             return response, 400
         else : 
             return response , 500
+    except Exception as e:
+        print(str(e))
+        return jsonify({'status': -1, 'error': 'Ocurrió un error procesando la solicitud', 'details': str(e)}), 500
+    
+
+@users_routes.route('/api/productos/<int:producto_id>', methods=['PUT'])
+def update_productoRoutes(producto_id):
+    try : 
+        product_data = request.json
+        response = update_productoRepository(producto_id,product_data)
+        if response['status'] == 1 : 
+            return jsonify(response), 200
+        if response['status'] == 0 : 
+            return jsonify(response),400
+        if response['status'] == -1 : 
+            return jsonify(response),500
+    except Exception as e : 
+        print(str(e))
+        return jsonify({'status': -1, 'error': 'Ocurrió un error procesando la solicitud', 'details': str(e)}), 500
+    
+
+@users_routes.route('/api/productos/<int:producto_id>', methods=['DELETE'])
+def delete_productoRoutes(producto_id):
+    try:
+        response = delete_productoRepository(producto_id)
+        if response['status'] == 1:
+            return jsonify(response), 200
+        if response['status'] == 0:
+            return jsonify(response), 400
+        if response['status'] == -1:
+            return jsonify(response), 500
     except Exception as e:
         print(str(e))
         return jsonify({'status': -1, 'error': 'Ocurrió un error procesando la solicitud', 'details': str(e)}), 500

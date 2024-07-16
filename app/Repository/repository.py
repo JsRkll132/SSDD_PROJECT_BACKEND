@@ -390,3 +390,40 @@ def obtener_ordenesByIdRepository(orden_id):
     except Exception as e:
         session.rollback()
         return {'status': -1, 'error': 'Ocurrió un error al momento obtener las ordenes', 'details': str(e)}
+    
+
+
+def update_productoRepository(producto_id,product_data) : 
+    try : 
+        producto = session.query(Producto).filter_by(id=producto_id).first()
+        if not producto:
+            return {'status':0,'error': 'Producto no encontrado'}
+        if 'nombre' in product_data:
+            producto.nombre = product_data['nombre']
+        if 'precio' in product_data:
+            producto.precio = product_data['precio']
+        if 'sku' in product_data:
+            producto.sku = product_data['sku']
+        if 'stock' in product_data:
+            producto.stock = product_data['stock']
+        if 'url_imagen' in product_data:
+            producto.url_imagen = product_data['url_imagen']
+        session.commit()
+        return {'status':1,'message': f'Producto {producto_id} actualizado exitosamente'}
+    except Exception as e: 
+        session.rollback()
+        return  {'status':-1,'error': str(e)}
+
+
+def delete_productoRepository(producto_id):
+    try:
+        producto = session.query(Producto).filter_by(id=producto_id).first()
+        if not producto:
+            return {'status': 0, 'error': 'Producto no encontrado'}
+        
+        session.delete(producto)
+        session.commit()
+        return {'status': 1, 'message': f'Producto {producto_id} eliminado exitosamente'}
+    except Exception as e:
+        session.rollback()
+        return {'status': -1, 'error': str(e)}

@@ -27,6 +27,7 @@ class Usuario(Base):
     rol_id = Column(Integer, ForeignKey('roles.id'), nullable=False)
     score_crediticio = Column(Integer)
     credito = Column(Float, default=0.0)  # Nueva columna
+    correo = Column(String(100))  
     rol = relationship('Rol')
     ordenes = relationship('Orden', back_populates='cliente')
 

@@ -13,6 +13,29 @@ Session = sessionmaker(bind=engine)
 session = Session()
 
 
+
+
+
+
+
+def publish_message(queue_name, message):
+    connection = get_rabbitmq_connection()
+    channel = connection.channel()
+    channel.queue_declare(queue=queue_name, durable=True)
+    
+    channel.basic_publish(
+        exchange='',
+        routing_key=queue_name,
+        body=json.dumps(message),
+        properties=pika.BasicProperties(
+            delivery_mode=2,  # Mensaje persistente
+        ))
+    connection.close()
+
+
+
+
+
 def getRoles() : 
     try : 
         roles = session.query(Rol).all()
@@ -115,7 +138,8 @@ def confirmar_ordenRepository(orden_id,metodo_pago) :
         cliente = orden.cliente
         
         total_orden = sum(item.precio_compra * item.cantidad for item in orden.items)
-        
+        nueva_factura = Factura(orden_id=orden_id, monto=total_orden, pagada=True)
+        session.add(nueva_factura)
         if metodo_pago == 'score_crediticio':
             if cliente.score_crediticio < total_orden:
                 return {'status':0,'error': 'Score crediticio insuficiente'}
@@ -129,7 +153,14 @@ def confirmar_ordenRepository(orden_id,metodo_pago) :
         
         orden.estado = 'Confirmada'
         session.commit()
-        
+        message = {
+            'orden_id': orden_id,
+            'metodo_pago': metodo_pago,
+            'cliente_email': cliente.correo,
+            'factura_monto': nueva_factura.monto,
+            'factura_fecha': nueva_factura.fecha_emision.isoformat(),
+        }
+        publish_message('order_confirmations', message)
         return {'status':1,'message': 'Orden confirmada exitosamente'}
     except Exception as e :
         session.rollback()

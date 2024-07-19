@@ -151,35 +151,39 @@ def login_userRoutes() :
         print(str(e))
         return jsonify({'error': 'Error en la operacion'}),500                
     """
-@users_routes.route('/api/addtoCar',methods=['POST'])
-def AddToCarRoutes() : 
+@users_routes.route('/api/addtoCar', methods=['POST'])
+def AddToCarRoutes():
     try:
         data = request.get_json()
-        carrito_id = data.get('carrito_id')
+        usuario_id = data.get('usuario_id')
         producto_id = data.get('producto_id')
         cantidad = data.get('cantidad')
 
-        if not carrito_id or not producto_id or not cantidad:
-            return jsonify({'status': -1, 'error': 'carrito_id, producto_id, y cantidad son necesarios'}), 400
+        if not usuario_id or not producto_id or not cantidad:
+            return jsonify({'status': -1, 'error': 'usuario_id, producto_id, y cantidad son necesarios'}), 400
 
-        result = AddToCarRepository(carrito_id, producto_id, cantidad)
+        result = AddToCarRepository(usuario_id, producto_id, cantidad)
 
         if result['status'] == -1:
             return jsonify(result), 400
         return jsonify(result), 201
     except Exception as e:
-        return jsonify({'status': -1, 'error': 'Ocurrió un error procesando la solicitud', 'details': str(e)}), 500
-           
+        return jsonify({'status': -1, 'error': 'Ocurrió un error procesando la solicitud', 'details': str(e)}), 500          
 
 @users_routes.route('/api/productos_en_carritos', methods=['GET'])
 def obtener_productos_en_carritosRoutes():
-    try : 
-        data = obtener_productos_en_carritosRepository()
-        return jsonify({"status":1,"data":data}),200
-        pass
+    try:
+        usuario_id = request.args.get('usuario_id')
+        if not usuario_id:
+            return jsonify({'status': 0, 'error': 'Falta el ID del usuario'}), 400
+
+        data = obtener_productos_en_carritosRepository(int(usuario_id))
+        return jsonify(data), 200
+
     except Exception as e:
-        return jsonify({'status': -1, 'error': 'Ocurrió un error procesando la solicitud', 'details': str(e)}), 500
-           
+        return jsonify({'status': -1, 'error': 'Ocurrió un error procesando la solicitud', 'details': str(e)}), 500           
+
+
 @users_routes.route('/api/eliminaritem', methods=['POST'])
 def deleteFromCarritoRoutes() : 
     try : 
@@ -194,15 +198,19 @@ def deleteFromCarritoRoutes() :
     
 @users_routes.route('/api/ordenes', methods=['GET'])
 def obtener_ordenesRoutes():
-    try : 
-        data = obtener_ordenesRepository()
-        if data : 
-            return  jsonify({'status': 1, 'ordenes': data})
+    try:
+        usuario_id = request.args.get('usuario_id')
+        if not usuario_id:
+            return jsonify({'status': 0, 'error': 'Falta el ID del usuario'}), 400
+
+        data = obtener_ordenesRepository(usuario_id)
+        if data['status'] == 1:
+            return jsonify(data)
+        else:
+            return jsonify(data), 500
 
     except Exception as e:
         return jsonify({'status': -1, 'error': 'Ocurrió un error procesando la solicitud', 'details': str(e)}), 500
-    
-
 
 @users_routes.route('/api/ordenes/<int:orden_id>', methods=['GET'])
 def obtener_ordenesByIdRoutes(orden_id) : 

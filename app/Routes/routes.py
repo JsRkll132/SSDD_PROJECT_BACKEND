@@ -3,7 +3,8 @@ from flask import Blueprint, jsonify, request
 import pika
 
 from app.Rabbitmq.rabbitmq import get_rabbitmq_connection
-from app.Repository.repository import AddToCarRepository, agregar_productoRepository, confirmar_ordenRepository, confirmar_pagoRepository, delete_productoRepository, deleteFromCarritoRepository, facturas_pendientesRepository, generar_orden, getRoles, listar_productos, login_userRepository, obtener_ordenesByIdRepository, obtener_ordenesRepository, obtener_productos_en_carritosRepository, pagarRepository, update_productoRepository, verificar_scoreRepository
+from app.Repository.repository import AddToCarRepository, agregar_productoRepository, confirmar_ordenRepository, confirmar_pagoRepository, delete_productoRepository, deleteFromCarritoRepository, facturas_pendientesRepository, generar_orden, getRoles, listar_productos, loginRepository, obtener_ordenesByIdRepository, obtener_ordenesRepository, obtener_productos_en_carritosRepository, pagarRepository, registerRepository, update_productoRepository, verificar_scoreRepository
+from app.utils import Security
 
 
 users_routes = Blueprint('users_routes',__name__)
@@ -133,7 +134,7 @@ def listar_productosRoutes() :
     except Exception as e : 
         print(str(e))
         return jsonify({'error': 'Error en la operacion'}),500        
-
+"""
 @users_routes.route('/api/login',methods=['POST'])
 def login_userRoutes() : 
     try :
@@ -149,7 +150,7 @@ def login_userRoutes() :
     except Exception as e :
         print(str(e))
         return jsonify({'error': 'Error en la operacion'}),500                
-    
+    """
 @users_routes.route('/api/addtoCar',methods=['POST'])
 def AddToCarRoutes() : 
     try:
@@ -264,3 +265,48 @@ def delete_productoRoutes(producto_id):
     except Exception as e:
         print(str(e))
         return jsonify({'status': -1, 'error': 'Ocurrió un error procesando la solicitud', 'details': str(e)}), 500
+
+
+@users_routes.route('/api/register', methods=['POST'])
+def registerRoutes():
+    try : 
+        data = request.get_json()
+        nombre_usuario = data['nombre_usuario']
+        contrasena = data['contrasena']
+        correo = data['correo']
+        rol_nombre = data.get('rol', 'Cliente')
+
+        usuario, error = registerRepository(nombre_usuario, contrasena, correo, rol_nombre)
+        if error:
+            return jsonify({'status': 0,"message": error}), 400
+
+        return jsonify({'status': 1,"message": "Usuario registrado exitosamente"}), 201
+    except Exception as e : 
+        print(str(e))
+        return jsonify({'status': -1, 'error': 'Ocurrio un error en la conexion', 'details': str(e)}), 500
+    
+
+
+@users_routes.route('/api/login', methods=['POST'])
+def loginRoutes():
+    try:
+        data = request.get_json()
+        nombre_usuario = data['nombre_usuario']
+        contrasena = data['contrasena']
+        
+        usuario, error = loginRepository(nombre_usuario, contrasena)
+        if error:
+            return jsonify({'status': 0, 'message': error}), 401
+        
+        # Aquí podrías generar un token JWT o similar si lo deseas
+        token = Security.Security().generate_token(usuario)
+        return jsonify({'status': 1, 'message': 'Inicio de sesión exitoso', 'data_info': {
+            'id': usuario.id,
+            'nombre_usuario': usuario.nombre_usuario,
+            'correo': usuario.correo,
+            'rol': usuario.rol.id
+        },"token":token},), 200
+    
+    except Exception as e:
+        print(str(e))
+        return jsonify({'status': -1, 'error': 'Ocurrió un error en la conexión', 'details': str(e)}), 500

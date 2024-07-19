@@ -9,6 +9,9 @@ from email.mime.text import MIMEText
 from dotenv import load_dotenv
 import os
 RABBITMQ_QUEUES = ['order_confirmations', 'invoice_notifications','productos']
+
+
+
 load_dotenv()
 
 def send_email(cliente_email, orden):
@@ -41,7 +44,7 @@ def send_email(cliente_email, orden):
     context = ssl.create_default_context()
     body += '''
     Atentamente,
-    Tu Empresa
+    Grupo Deltron
     '''
     
     msg = MIMEText(body)

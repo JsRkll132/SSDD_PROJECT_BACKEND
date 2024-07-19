@@ -240,7 +240,7 @@ def agregar_productoRepository(data) :
         print(str(e))
         session.rollback()
         return None
-    
+""" 
 def login_userRepository(user_data) :
     try : 
         user = session.query(Usuario).filter_by(nombre_usuario=user_data['username']).first()
@@ -257,7 +257,7 @@ def login_userRepository(user_data) :
         session.rollback()
         return {'status':-1,'error' : 'Ocurrio un error al iniciar sesion.'}
     
-
+"""  
     
 def AddToCarRepository(carrito_id, producto_id, cantidad):
     try:
@@ -427,3 +427,52 @@ def delete_productoRepository(producto_id):
     except Exception as e:
         session.rollback()
         return {'status': -1, 'error': str(e)}
+    
+
+def registerRepository(nombre_usuario, contrasena, correo, rol_nombre='Cliente'):
+    try : 
+        if session.query(Usuario).filter_by(nombre_usuario=nombre_usuario).first():
+            return None, F"El usuario {nombre_usuario} ya existe"
+
+        rol = session.query(Rol).filter_by(nombre=rol_nombre).first()
+        if not rol:
+            rol = Rol(nombre=rol_nombre)
+            session.add(rol)
+            session.commit()
+
+        nuevo_usuario = Usuario(
+            nombre_usuario=nombre_usuario,
+            contrasena=contrasena,
+            correo=correo,
+            rol_id=rol.id
+        )
+        session.add(nuevo_usuario)
+        session.commit()
+        return nuevo_usuario, None
+    except Exception as e :
+        print(str(e))
+        session.rollback()
+        return {'status': -1, 'error': 'Ocurrio un error en la conexion', 'details': str(e)}
+    
+
+def obtener_usuario_por_nombre(nombre_usuario):
+    try: 
+        return session.query(Usuario).filter_by(nombre_usuario=nombre_usuario).first()
+    except Exception as e :
+        session.rollback()
+        print(str(e))
+
+
+def loginRepository(nombre_usuario, contrasena):
+    try:
+        usuario = session.query(Usuario).filter_by(nombre_usuario=nombre_usuario).first()
+        
+        if not usuario or usuario.contrasena != contrasena:
+            return None, 'Nombre de usuario o contraseña incorrectos'
+        
+        return usuario, None
+    
+    except Exception as e:
+        session.rollback()
+        print(str(e))
+        return None, 'Ocurrió un error en la conexión'        

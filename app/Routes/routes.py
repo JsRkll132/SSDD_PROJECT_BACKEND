@@ -3,7 +3,7 @@ from flask import Blueprint, jsonify, request
 import pika
 
 from app.Rabbitmq.rabbitmq import get_rabbitmq_connection
-from app.Repository.repository import AddToCarRepository, agregar_productoRepository, confirmar_ordenRepository, confirmar_pagoRepository, delete_productoRepository, deleteFromCarritoRepository, facturas_pendientesRepository, generar_orden, getRoles, listar_productos, loginRepository, obtener_ordenesByIdRepository, obtener_ordenesRepository, obtener_productos_en_carritosRepository, pagarRepository, registerRepository, update_productoRepository, verificar_scoreRepository
+from app.Repository.repository import AddToCarRepository, agregar_productoRepository, confirmar_ordenRepository, confirmar_pagoRepository, delete_item_from_cartRepository, delete_productoRepository, facturas_pendientesRepository, generar_orden, getRoles, listar_productos, loginRepository, obtener_ordenesByIdRepository, obtener_ordenesRepository, obtener_productos_en_carritosRepository, pagarRepository, registerRepository, update_productoRepository, verificar_scoreRepository
 from app.utils import Security
 
 
@@ -185,17 +185,23 @@ def obtener_productos_en_carritosRoutes():
 
 
 @users_routes.route('/api/eliminaritem', methods=['POST'])
-def deleteFromCarritoRoutes() : 
-    try : 
+def delete_from_carritoRoutes():
+    try:
         data = request.get_json()
-        item_id_ =data.get('item_id')
-        response = deleteFromCarritoRepository(item_id_)
-        if response['status'] == -1 :
-            return jsonify(response),400
-        return jsonify(response),201
+        usuario_id = data.get('usuario_id')
+        producto_id = data.get('producto_id')
+
+        if not usuario_id or not producto_id:
+            return jsonify({'status': -1, 'error': 'usuario_id y producto_id son necesarios'}), 400
+
+        response = delete_item_from_cartRepository(usuario_id, producto_id)
+        if response['status'] == -1:
+            return jsonify(response), 400
+        return jsonify(response), 200
     except Exception as e:
         return jsonify({'status': -1, 'error': 'Ocurrió un error procesando la solicitud', 'details': str(e)}), 500
-    
+
+
 @users_routes.route('/api/ordenes', methods=['GET'])
 def obtener_ordenesRoutes():
     try:
@@ -295,6 +301,22 @@ def registerRoutes():
     
 
 
+def publish_message(queue_name, message):
+    connection = get_rabbitmq_connection()
+    channel = connection.channel()
+    channel.queue_declare(queue=queue_name, durable=True)
+    
+    channel.basic_publish(
+        exchange='',
+        routing_key=queue_name,
+        body=json.dumps(message),
+        properties=pika.BasicProperties(
+            delivery_mode=2,  # Mensaje persistente
+        ))
+    connection.close()
+
+
+
 @users_routes.route('/api/login', methods=['POST'])
 def loginRoutes():
     try:
@@ -318,3 +340,20 @@ def loginRoutes():
     except Exception as e:
         print(str(e))
         return jsonify({'status': -1, 'error': 'Ocurrió un error en la conexión', 'details': str(e)}), 500
+
+
+@users_routes.route('/api/cargar_credito', methods=['POST'])
+def cargar_credito():
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        amount = data.get('amount')
+
+        if not user_id or not amount:
+            return jsonify({'status': -1, 'error': 'user_id y amount son necesarios'}), 400
+
+        publish_message('credito_carga', data)
+        return jsonify({'status': 1, 'message': 'Solicitud de recarga de crédito en proceso'}), 202
+
+    except Exception as e:
+        return jsonify({'status': -1, 'error': 'Ocurrió un error procesando la solicitud', 'details': str(e)}), 500

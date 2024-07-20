@@ -1,21 +1,16 @@
 import json
 import pika
-from sqlalchemy import create_engine, func
+from sqlalchemy import create_engine, desc, func
 from sqlalchemy.orm import sessionmaker
 
 from app.Rabbitmq.rabbitmq import get_rabbitmq_connection
 from ..Models.models import Carrito, ItemCarrito, Reserva, Usuario,Producto,Factura,Orden,ItemOrden,Rol
 import os
-
+import uuid
 
 engine = create_engine(os.getenv('DATABASE_URL'))
 Session = sessionmaker(bind=engine)
 session = Session()
-
-
-
-
-
 
 
 def publish_message(queue_name, message):
@@ -31,10 +26,6 @@ def publish_message(queue_name, message):
             delivery_mode=2,  # Mensaje persistente
         ))
     connection.close()
-
-
-
-
 
 def getRoles() : 
     try : 
@@ -55,15 +46,24 @@ def listar_productos():
         session.rollback()
         return None
 
-
-def deleteFromCarritoRepository(item_id) : 
-    try :
-        session.query(ItemCarrito).filter_by(id=item_id).delete()
-        session.commit()
-        return {'status': 1, 'message': 'Producto eliminado del carrito', 'item_carrito_deleted': item_id}
-    except Exception as e : 
+def delete_item_from_cartRepository(usuario_id, producto_id):
+    try:
+        item = session.query(ItemCarrito).join(Carrito).filter(
+            Carrito.usuario_id == usuario_id,
+            ItemCarrito.producto_id == producto_id
+        ).first()
+        
+        if item:
+            session.delete(item)
+            session.commit()
+            return {'status': 1, 'message': 'Producto eliminado del carrito', 'item_carrito_deleted': item.id}
+        else:
+            return {'status': -1, 'error': 'El ítem no se encontró en el carrito'}
+    except Exception as e:
         session.rollback()
-        return {'status': -1, 'error': 'Ocurrió un error al momento de quitar el item', 'details': str(e)}
+        return {'status': -1, 'error': 'Ocurrió un error al momento de quitar el ítem', 'details': str(e)}   
+
+
 def generar_orden(usuario_id):
     try:
         # Obtener el carrito del usuario
@@ -125,31 +125,83 @@ def pagarRepository(orden_id,metodo):
         print(str(e))
         return {'error': 'Error en la operacion'}
 
-def confirmar_ordenRepository(orden_id,metodo_pago) : 
-    try :
+
+def publish_message_with_response(queue_name, message):
+    connection = get_rabbitmq_connection()
+    channel = connection.channel()
+    channel.queue_declare(queue=queue_name, durable=True)
+
+    correlation_id = str(uuid.uuid4())
+    result = channel.queue_declare(queue='', exclusive=True)
+    callback_queue = result.method.queue
+
+    response = None
+
+    def on_response(ch, method, properties, body):
+        nonlocal response
+        if properties.correlation_id == correlation_id:
+            response = json.loads(body)
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+
+    channel.basic_consume(
+        queue=callback_queue,
+        on_message_callback=on_response,
+        auto_ack=False
+    )
+
+    channel.basic_publish(
+        exchange='',
+        routing_key=queue_name,
+        body=json.dumps(message),
+        properties=pika.BasicProperties(
+            reply_to=callback_queue,
+            correlation_id=correlation_id,
+        )
+    )
+
+    while response is None:
+        connection.process_data_events()
+
+    connection.close()
+    return response
+def confirmar_ordenRepository(orden_id, metodo_pago):
+    try:
         print(orden_id)
         if not orden_id or not metodo_pago:
-            return {'status':0,'error': 'Falta el ID de la orden o el método de pago'}
+            return {'status': 0, 'error': 'Falta el ID de la orden o el método de pago'}
         
         orden = session.query(Orden).filter_by(id=orden_id).first()
         if not orden:
-            return {'status':0,'error': 'Orden no encontrada'}
+            return {'status': 0, 'error': 'Orden no encontrada'}
         
+        if orden.estado == 'Confirmada' : 
+             return {'status': 0, 'error': 'La orden ya se encuentra confirmada'}
+
         cliente = orden.cliente
-        
+
         total_orden = sum(item.precio_compra * item.cantidad for item in orden.items)
         nueva_factura = Factura(orden_id=orden_id, monto=total_orden, pagada=True)
         session.add(nueva_factura)
+
         if metodo_pago == 'score_crediticio':
+            metodo_pago_message = {
+                'username': cliente.nombre_usuario,
+                'orden_id': orden_id
+            }
+            response = publish_message_with_response('validar_riesgo', metodo_pago_message)
+
+            if 'risk' not in response or response['risk'] == 1:
+                return {'status': 0, 'error': 'Se encuentra en riesgo'}
             if cliente.score_crediticio < total_orden:
-                return {'status':0,'error': 'Score crediticio insuficiente'}
+                return {'status': 0, 'error': 'Score crediticio insuficiente'}
             cliente.score_crediticio -= total_orden
+
         elif metodo_pago == 'credito':
             if cliente.credito < total_orden:
-                return {'status':0,'error': 'Crédito insuficiente'}
+                return {'status': 0, 'error': 'Crédito insuficiente'}
             cliente.credito -= total_orden
         else:
-            return {'status':0,'error': 'Método de pago no válido'}
+            return {'status': 0, 'error': 'Método de pago no válido'}
         
         orden.estado = 'Confirmada'
         session.commit()
@@ -161,11 +213,12 @@ def confirmar_ordenRepository(orden_id,metodo_pago) :
             'factura_fecha': nueva_factura.fecha_emision.isoformat(),
         }
         publish_message('order_confirmations', message)
-        return {'status':1,'message': 'Orden confirmada exitosamente'}
-    except Exception as e :
+        
+        return {'status': 1, 'message': 'Orden confirmada exitosamente'}
+    except Exception as e:
         session.rollback()
         print(str(e))
-        return {'status':-1,'error': 'Error en la operacion','info':str(e)}
+        return {'status': -1, 'error': 'Error en la operación', 'info': str(e)}
     
 
 def verificar_scoreRepository(cliente_id) : 
@@ -362,8 +415,9 @@ def obtener_ordenesRepository(usuario_id):
             Usuario.nombre_usuario,
             Orden.estado,
             func.sum(ItemOrden.cantidad * ItemOrden.precio_compra).label('monto_total')
-        ).join(Usuario).join(ItemOrden).filter(Orden.cliente_id == usuario_id).group_by(Orden.id, Usuario.nombre_usuario).all()
-        
+        ).join(Usuario).join(ItemOrden).filter(Orden.cliente_id == usuario_id).group_by(
+            Orden.id, Usuario.nombre_usuario
+        ).order_by(desc(Orden.fecha_creacion)).all()
         ordenes_json = [{
             'id': orden.id,
             'fecha_creacion': orden.fecha_creacion,
@@ -491,3 +545,12 @@ def loginRepository(nombre_usuario, contrasena):
         session.rollback()
         print(str(e))
         return None, 'Ocurrió un error en la conexión'        
+
+def cargar_creditoRepository(user_id, amount):
+    user = session.query(Usuario).filter_by(id=user_id).first()
+    if user:
+        user.credito += amount
+        session.commit()
+        print(f"Crédito cargado correctamente para el usuario {user_id}")
+    else:
+        print(f"Usuario {user_id} no encontrado")

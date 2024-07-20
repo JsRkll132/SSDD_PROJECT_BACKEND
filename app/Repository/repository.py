@@ -164,6 +164,8 @@ def publish_message_with_response(queue_name, message):
 
     connection.close()
     return response
+
+
 def confirmar_ordenRepository(orden_id, metodo_pago):
     try:
         print(orden_id)
@@ -183,11 +185,16 @@ def confirmar_ordenRepository(orden_id, metodo_pago):
         nueva_factura = Factura(orden_id=orden_id, monto=total_orden, pagada=True)
         session.add(nueva_factura)
 
-        if metodo_pago == 'score_crediticio':
+        if metodo_pago == 'diferido':
+                  
             metodo_pago_message = {
                 'username': cliente.nombre_usuario,
-                'orden_id': orden_id
-            }
+                'orden_id': orden_id,
+                'metodo_pago': metodo_pago,
+                'cliente_email': cliente.correo,
+                'factura_monto': nueva_factura.monto,
+            
+                }
             response = publish_message_with_response('validar_riesgo', metodo_pago_message)
 
             if 'risk' not in response or response['risk'] == 1:
@@ -196,7 +203,7 @@ def confirmar_ordenRepository(orden_id, metodo_pago):
                 return {'status': 0, 'error': 'Score crediticio insuficiente'}
             cliente.score_crediticio -= total_orden
 
-        elif metodo_pago == 'credito':
+        elif metodo_pago == 'efectivo':
             if cliente.credito < total_orden:
                 return {'status': 0, 'error': 'Crédito insuficiente'}
             cliente.credito -= total_orden
@@ -278,7 +285,9 @@ def agregar_productoRepository(data) :
         channel = connection.channel()
         channel.queue_declare(queue='productos', durable=True)
         
-        message = json.dumps({'producto_id': nuevo_producto.id})
+        message = json.dumps({'producto_id': nuevo_producto.id
+                              ,'nombre':nuevo_producto.nombre,'precio':nuevo_producto.precio,
+                              'sku':nuevo_producto.sku,'stock':nuevo_producto.stock})
         channel.basic_publish(
             exchange='',
             routing_key='productos',
@@ -477,6 +486,25 @@ def update_productoRepository(producto_id,product_data) :
             producto.stock = product_data['stock']
         if 'url_imagen' in product_data:
             producto.url_imagen = product_data['url_imagen']
+        
+        connection = get_rabbitmq_connection()
+        channel = connection.channel()
+        channel.queue_declare(queue='productos', durable=True)
+        
+        message = json.dumps({'producto_id': producto.id
+                              ,'nombre':producto.nombre,'precio':producto.precio,
+                              'sku':producto.sku,'stock':producto.stock,'accion':'Edicion producto'})
+        channel.basic_publish(
+            exchange='',
+            routing_key='productos',
+            body=message,
+            properties=pika.BasicProperties(
+                delivery_mode=2,  # Make message persistent
+            ))
+        
+        connection.close()
+
+
         session.commit()
         return {'status':1,'message': f'Producto {producto_id} actualizado exitosamente'}
     except Exception as e: 
